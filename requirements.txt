@@ -1,0 +1,40 @@
+# Framework web
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# CLIP y ML
+open-clip-torch==2.29.0
+torch==2.5.1
+torchvision==0.20.1
+
+# Búsqueda vectorial
+faiss-cpu==1.9.0
+
+# Procesamiento de imágenes
+Pillow==11.0.0
+
+# Base de datos PostgreSQL
+asyncpg==0.30.0
+sqlalchemy[asyncio]==2.0.36
+alembic==1.14.0
+
+# Redis y Celery
+redis==5.2.0
+celery==5.4.0
+
+# MinIO / S3
+minio==7.2.10
+boto3==1.35.73
+
+# Validación y serialización
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# Utilidades
+python-multipart==0.0.17
+python-dotenv==1.0.1
+numpy==1.26.4
+
+# CORS
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
