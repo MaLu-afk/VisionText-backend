@@ -73,17 +73,14 @@ class CLIPService:
     def compute_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
         """
         Calcular similitud coseno entre dos embeddings
-        Retorna un valor entre 0 y 1 (1 = idénticos, 0 = completamente diferentes)
+        Retorna un valor entre -1 y 1:
+        - 1 = idénticos
+        - 0 = ortogonales (no relacionados)
+        - -1 = opuestos
         """
-        # Normalizar embeddings si no están normalizados
-        embedding1 = embedding1 / np.linalg.norm(embedding1)
-        embedding2 = embedding2 / np.linalg.norm(embedding2)
-        
-        # Producto punto (cosine similarity)
+        # Los embeddings de CLIP ya están normalizados (norma = 1)
+        # Producto punto = cosine similarity directamente
         similarity = np.dot(embedding1, embedding2)
-        
-        # Convertir de [-1, 1] a [0, 1]
-        similarity = (similarity + 1) / 2
         
         return float(similarity)
     

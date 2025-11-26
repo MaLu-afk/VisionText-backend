@@ -30,7 +30,7 @@ class SearchResponse(BaseModel):
 class TextSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500)
     limit: int = Field(default=20, ge=1, le=100)
-    threshold: float = Field(default=0.1, ge=0.0, le=1.0)
+    threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)  # None = usa default de .env
 
 
 class UploadStatus(str, Enum):
@@ -47,8 +47,10 @@ class UploadResponse(BaseModel):
     image_id: Optional[str] = None
     filename: Optional[str] = None
     status: Optional[UploadStatus] = None
-    similarity_score: Optional[float] = None  # Similitud imagen-texto
+    similarity_score: Optional[float] = None  
     required_similarity: Optional[float] = None
+    banned_words: Optional[List[str]] = None 
+    rejection_reason: Optional[str] = None
 
 
 class SimilarityValidationResult(BaseModel):
@@ -69,7 +71,7 @@ class ImageRecord(BaseModel):
     size: int
     format: str
     status: UploadStatus = UploadStatus.COMPLETED
-    similarity_score: Optional[float] = None  # Similitud imagen-texto al subir
+    similarity_score: Optional[float] = None  
     created_at: datetime
     updated_at: Optional[datetime] = None
 

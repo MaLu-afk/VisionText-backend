@@ -52,15 +52,18 @@ class FAISSService:
             k_search = min(k, self.index.ntotal)
             distances, indices = self.index.search(query_embedding, k_search)
             
-            # Convertir distancias (producto interno) a similitud [0, 1]
-            # Como los embeddings están normalizados, el producto interno es cosine similarity
-            # Rango: [-1, 1] → convertir a [0, 1]
-            similarities = (distances[0] + 1) / 2
+            # Los embeddings están normalizados, por lo que el producto interno (IndexFlatIP)
+            # es directamente la similitud coseno en rango [-1, 1]
+            # NO convertir a [0, 1] - eso infla artificialmente los scores
+            similarities = distances[0]
             
             # Filtrar por threshold y retornar resultados
             results = []
             for sim, idx in zip(similarities, indices[0]):
-                if idx != -1 and sim >= threshold:
+                # Verificar que el índice sea válido y esté dentro del rango de image_ids
+                # Esto también maneja "vectores huérfanos" (orphaned vectors) donde el índice FAISS
+                # podría tener un vector pero su ID correspondiente ya fue eliminado de image_ids.
+                if idx != -1 and idx < len(self.image_ids) and sim >= threshold:
                     results.append((self.image_ids[idx], float(sim)))
             
             return results
@@ -143,22 +146,22 @@ class FAISSService:
     async def remove_embedding(self, image_id: str) -> bool:
         """
         Eliminar un embedding del índice
-        Nota: FAISS no soporta eliminación directa, se debe reconstruir el índice
+        Solo remueve el ID de la lista, el vector físico se eliminará al reiniciar el servidor
+        Esto permite eliminación instantánea sin reconstruir todo el índice
         """
         async with self.lock:
             if image_id not in self.image_ids:
                 return False
             
-            # Encontrar índice
-            idx = self.image_ids.index(image_id)
-            
-            # Remover de lista de IDs
-            self.image_ids.pop(idx)
-            
-            # Para FAISS, necesitamos reconstruir el índice sin ese vector
-            # Esto es costoso, considerar hacer batch removals
-            print(f"Warning: FAISS doesn't support direct removal. Index should be rebuilt.")
-            return True
+            try:
+                # Remover de lista de IDs
+                self.image_ids.remove(image_id)
+                print(f"Removed image ID from FAISS (remaining: {len(self.image_ids)} images)")
+                return True
+                
+            except Exception as e:
+                print(f"Error removing image ID: {e}")
+                return False
 
 
 # Instancia singleton

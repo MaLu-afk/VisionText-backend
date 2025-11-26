@@ -8,18 +8,15 @@ class Settings(BaseSettings):
     port: int = 8000
     
     # CLIP Model
-    clip_model: str = "ViT-B-32"
+    clip_model: str = "ViT-L-14"
     clip_pretrained: str = "openai"
     cache_dir: str = "./model_cache"
     
     # PostgreSQL (Cloud - Railway)
     postgres_url: str
     
-    # Redis (Cloud - Railway)
-    redis_url: str
-    
     # MinIO / S3
-    minio_endpoint: str = "minio:9000"
+    minio_endpoint: str = "visiontext-minio:9000"
     minio_access_key: str
     minio_secret_key: str
     minio_secure: bool = False
@@ -33,30 +30,27 @@ class Settings(BaseSettings):
     max_upload_size: int = 10485760  # 10MB
     thumbnail_size: int = 256
     default_search_limit: int = 20
-    default_threshold: float = 0.1
+    default_search_limit: int = 20
+    text_search_threshold: float = 0.18  # Default para texto
+    image_search_threshold: float = 0.65  # Default para imagen
     
     # Similarity validation for upload
-    similarity_threshold: float = 0.25  # Umbral mínimo de similitud imagen-texto
+    similarity_threshold: float = 0.20  # 20% de similitud mínima imagen-texto
     
     # CORS
-    cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:8000"
+    cors_origins: str 
     
-    # Worker
-    worker: bool = False
-    celery_broker_url: Optional[str] = None
-    celery_result_backend: Optional[str] = None
+    # Base URL
+    base_url: str = "http://localhost:8000" 
+    
+    # Admin
+    admin_username: str
+    admin_password: str
+    jwt_secret_key: str 
     
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.cors_origins.split(",")]
-    
-    @property
-    def celery_broker(self) -> str:
-        return self.celery_broker_url or self.redis_url
-    
-    @property
-    def celery_backend(self) -> str:
-        return self.celery_result_backend or self.redis_url
     
     class Config:
         env_file = ".env"

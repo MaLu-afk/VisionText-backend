@@ -30,3 +30,7 @@ temp/
 
 # Archivos de entorno
 .env.local
+
+# Modelos y datos pesados
+faiss_indices/
+model_cache/

@@ -195,6 +195,44 @@ class DatabaseService:
         except Exception as e:
             print(f"Error getting image count: {e}")
             return 0
+    
+    async def get_all_images_paginated(
+        self, 
+        limit: int = 100, 
+        offset: int = 0
+    ) -> List[ImageRecord]:
+        """Obtener imágenes con paginación"""
+        try:
+            async with self.async_session() as session:
+                from sqlalchemy import select
+                query = select(ImageDB).where(
+                    ImageDB.status == "completed"
+                ).order_by(ImageDB.created_at.desc()).limit(limit).offset(offset)
+                
+                result = await session.execute(query)
+                db_images = result.scalars().all()
+                
+                return [
+                    ImageRecord(
+                        id=img.id,
+                        filename=img.filename,
+                        description=img.description,
+                        image_path=img.image_path,
+                        thumbnail_path=img.thumbnail_path,
+                        width=img.width,
+                        height=img.height,
+                        size=img.size,
+                        format=img.format,
+                        status=UploadStatus(img.status),
+                        similarity_score=img.similarity_score,
+                        created_at=img.created_at,
+                        updated_at=img.updated_at
+                    )
+                    for img in db_images
+                ]
+        except Exception as e:
+            print(f"Error getting paginated images: {e}")
+            return []
 
 
 # Instancia singleton
