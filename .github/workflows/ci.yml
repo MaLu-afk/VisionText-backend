@@ -1,12 +1,11 @@
 name: CI
 
-# Corre en cada push a main y en cada PR. También lo reutiliza deploy.yml
-# para que nunca se despliegue un commit que no pase estas verificaciones.
+# No corre en push ni en PR: los push solo suben código.
+# Lo ejecuta deploy.yml al publicar un tag, para que nunca se despliegue un commit
+# que no pase estas verificaciones. También se puede lanzar a mano desde Actions.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,7 +15,7 @@ jobs:
     name: Build y tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Se construye la misma imagen que construirá Railway: si falla aquí, fallaría allí
       - name: Construir imagen Docker

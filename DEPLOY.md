@@ -37,14 +37,16 @@ así que MinIO y PostgreSQL solo se usan por la red privada.
 ## Flujo de despliegue (CI/CD)
 
 ```
-push / PR a main ──► CI (build + tests)            ──► no despliega
-tag vX.Y.Z       ──► CI ──► mueve rama production  ──► Railway construye y despliega
+push a main ──► nada (solo sube el código)
+tag vX.Y.Z  ──► CI (build + tests) ──► mueve rama production ──► Railway construye y despliega
 ```
 
-- `.github/workflows/ci.yml`: corre en cada push a `main` y en cada PR.
-- `.github/workflows/deploy.yml`: corre al publicar un tag `vX.Y.Z`. Vuelve a ejecutar CI,
-  comprueba que el commit del tag está en `main` y fuerza la rama `production` a ese commit.
+- `.github/workflows/deploy.yml`: corre al publicar un tag `vX.Y.Z`. Ejecuta CI, comprueba
+  que el commit del tag está en `main` y fuerza la rama `production` a ese commit.
+- `.github/workflows/ci.yml`: no tiene disparador propio; lo llama `deploy.yml`. También se
+  puede lanzar a mano (*Actions → CI → Run workflow*) para probar `main` sin desplegar.
 - Railway observa **solo** la rama `production`, así que los push a `main` nunca despliegan.
+- Si CI falla, el despliegue se detiene y producción sigue con la versión anterior.
 
 Cada repo se versiona por separado: un tag en `VisionText-backend` despliega solo el backend.
 
@@ -207,7 +209,7 @@ Documentación interactiva: `https://<dominio-backend>/docs`
 | POST | `/api/search/image` | — | 200 / 400 no es imagen / 413 >10 MB. Form: `image`, `limit`, `threshold` |
 | GET | `/api/images/{id}` | — | 200 JPEG / 404 |
 | GET | `/api/thumbnails/{id}` | — | 200 JPEG / 404 |
-| POST | `/api/admin/login` | — | 200 `{access_token}` / 401. Form: `username`, `password` |
+| POST | `/api/admin/login` | — | 200 `{access_token}` / 401 / 429 demasiados intentos (cabecera `Retry-After`). Form: `username`, `password` |
 | POST | `/api/upload` | Bearer | 200 subida / 400 / 401 / 413 / 422 rechazada por contenido o similitud. Form: `image`, `description` (opcional) |
 | GET | `/api/admin/images` | Bearer | 200. Query: `limit` (1-500), `offset` |
 | DELETE | `/api/admin/images/{id}` | Bearer | 200 / 401 / 404 |
@@ -215,6 +217,12 @@ Documentación interactiva: `https://<dominio-backend>/docs`
 
 En Postman: llama a `/api/admin/login` y usa el `access_token` en
 *Authorization → Bearer Token*. El token dura 24 horas.
+
+**Límite de login:** tras 5 intentos fallidos desde una IP, o 10 contra un mismo usuario,
+el login responde 429 durante 15 minutos (incluso con la clave correcta). Un login exitoso
+reinicia los contadores. Se configura con `LOGIN_MAX_ATTEMPTS_PER_IP`,
+`LOGIN_MAX_ATTEMPTS_PER_USERNAME` y `LOGIN_WINDOW_SECONDS`. El estado vive en memoria:
+se reinicia con cada despliegue y asume una sola réplica del backend.
 
 ---
 

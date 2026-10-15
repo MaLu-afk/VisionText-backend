@@ -3,11 +3,21 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
+from app.config import settings
+from main import app, ip_login_limiter, username_login_limiter
 
 # Sin "with": no se ejecuta el lifespan, así que no se cargan CLIP, la BD ni MinIO.
 # Basta para probar todo lo que ocurre antes de tocar esos servicios.
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def reset_login_limits():
+    ip_login_limiter.clear()
+    username_login_limiter.clear()
+    yield
+    ip_login_limiter.clear()
+    username_login_limiter.clear()
 
 
 @pytest.fixture
@@ -91,3 +101,33 @@ def test_upload_with_banned_filename_returns_422_with_details(admin_headers):
     assert body["status"] == "rejected"
     assert body["rejection_reason"] == "banned_words"
     assert body["banned_words"] == ["gun"]
+
+
+def test_login_is_blocked_after_too_many_failures():
+    for _ in range(settings.login_max_attempts_per_ip):
+        response = client.post("/api/admin/login", data={"username": "admin", "password": "wrong"})
+        assert response.status_code == 401
+
+    # Bloqueado incluso con la contraseña correcta, hasta que expire la ventana
+    response = client.post("/api/admin/login", data={
+        "username": os.environ["ADMIN_USERNAME"],
+        "password": os.environ["ADMIN_PASSWORD"],
+    })
+
+    assert response.status_code == 429
+    assert 0 < int(response.headers["retry-after"]) <= settings.login_window_seconds
+
+
+def test_successful_login_resets_failure_count():
+    for _ in range(settings.login_max_attempts_per_ip - 1):
+        client.post("/api/admin/login", data={"username": "admin", "password": "wrong"})
+    ok = client.post("/api/admin/login", data={
+        "username": os.environ["ADMIN_USERNAME"],
+        "password": os.environ["ADMIN_PASSWORD"],
+    })
+    assert ok.status_code == 200
+
+    # El contador volvió a cero: un nuevo fallo da 401, no 429
+    response = client.post("/api/admin/login", data={"username": "admin", "password": "wrong"})
+
+    assert response.status_code == 401

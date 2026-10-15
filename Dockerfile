@@ -12,9 +12,14 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# El pip de la imagen base es antiguo y rechaza paquetes válidos del índice de PyTorch
+RUN pip install --upgrade pip==25.0.1
+
 # PyTorch solo CPU: evita descargar CUDA (varios GB) en un servidor sin GPU.
-# requirements.txt fija torch==2.5.1, que esta build (2.5.1+cpu) ya satisface.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu \
+# --no-deps: solo torch/torchvision salen del índice de PyTorch; sus dependencias
+# se instalan desde PyPI en el paso siguiente. requirements.txt fija torch==2.5.1,
+# que esta build (2.5.1+cpu) ya satisface.
+RUN pip install --no-deps --index-url https://download.pytorch.org/whl/cpu \
     torch==2.5.1 torchvision==0.20.1
 
 # Copiar requirements

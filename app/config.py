@@ -45,7 +45,12 @@ class Settings(BaseSettings):
     # Admin
     admin_username: str
     admin_password: str
-    jwt_secret_key: str 
+    jwt_secret_key: str
+
+    # Límite de intentos fallidos de login (ventana deslizante)
+    login_max_attempts_per_ip: int = 5
+    login_max_attempts_per_username: int = 10
+    login_window_seconds: int = 900  # 15 minutos
     
     @property
     def cors_origins_list(self) -> List[str]:

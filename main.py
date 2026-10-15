@@ -1,9 +1,10 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, Response, Depends, status
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, Request, Response, Depends, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
+import math
 import time
 from typing import List, Optional, Tuple
 
@@ -19,6 +20,11 @@ from app.services.image import image_processing_service
 from app.services.minio import minio_service
 from app.services.validation import content_validator
 from app.services.auth import verify_admin_credentials, create_access_token, verify_token
+from app.services.rate_limit import LoginRateLimiter
+
+
+ip_login_limiter = LoginRateLimiter(settings.login_max_attempts_per_ip, settings.login_window_seconds)
+username_login_limiter = LoginRateLimiter(settings.login_max_attempts_per_username, settings.login_window_seconds)
 
 
 @asynccontextmanager
@@ -415,14 +421,41 @@ async def get_thumbnail(image_id: str):
 
 # ==================== ADMIN ENDPOINTS ====================
 
-@app.post("/api/admin/login")
-async def admin_login(username: str = Form(...), password: str = Form(...)):
-    """Login de administrador"""
+@app.post(
+    "/api/admin/login",
+    responses={429: {"description": "Demasiados intentos fallidos; ver cabecera Retry-After"}},
+)
+async def admin_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    """Login de administrador (limita los intentos fallidos por IP y por usuario)"""
+    # Con --proxy-headers, request.client es la IP del cliente que reporta el proxy de Railway.
+    # El límite por usuario cubre el caso de IPs falsificadas o rotadas.
+    ip_key = request.client.host if request.client else "unknown"
+    username_key = username.strip().lower()
+
+    retry_after = max(
+        ip_login_limiter.retry_after(ip_key),
+        username_login_limiter.retry_after(username_key),
+    )
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Demasiados intentos fallidos. "
+                f"Intenta de nuevo en {math.ceil(retry_after / 60)} minuto(s)."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
     if not verify_admin_credentials(username, password):
+        ip_login_limiter.register_failure(ip_key)
+        username_login_limiter.register_failure(username_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales incorrectas"
         )
+
+    ip_login_limiter.reset(ip_key)
+    username_login_limiter.reset(username_key)
 
     # Crear token
     access_token = create_access_token(

@@ -2,7 +2,7 @@ name: Deploy
 
 # Despliegue a producción SOLO al publicar un tag de versión (p. ej. v1.0.0).
 # Railway observa la rama "production": este workflow la mueve al commit del tag
-# después de que CI pase. Los push normales a main nunca despliegan.
+# después de que CI pase. Los push normales a main no ejecutan nada.
 on:
   push:
     tags: ["v*.*.*"]
@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
