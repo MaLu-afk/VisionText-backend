@@ -1,9 +1,11 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, String, Integer, Float, DateTime, Text, Enum as SQLEnum
+from sqlalchemy.orm import declarative_base, deferred
+from sqlalchemy import Column, String, Integer, Float, DateTime, Text, LargeBinary, Enum as SQLEnum
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple
 import enum
+
+import numpy as np
 
 from app.config import settings
 from app.models import ImageRecord, UploadStatus
@@ -30,6 +32,9 @@ class ImageDB(Base):
     similarity_score = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, onupdate=datetime.utcnow, nullable=True)
+    # Embedding CLIP (float32) para reconstruir FAISS sin volver a procesar las imágenes.
+    # deferred: solo se lee cuando se pide explícitamente
+    embedding = deferred(Column(LargeBinary, nullable=True))
 
 
 # Database Service
@@ -52,6 +57,9 @@ class DatabaseService:
         """Inicializar base de datos y crear tablas"""
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # create_all no modifica tablas existentes: agrega la columna si la tabla es anterior
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE images ADD COLUMN IF NOT EXISTS embedding BYTEA"))
     
     async def ping(self) -> bool:
         """Verificar que la base de datos responde"""
@@ -69,8 +77,8 @@ class DatabaseService:
         async with self.async_session() as session:
             yield session
     
-    async def insert_image(self, image_record: ImageRecord) -> bool:
-        """Insertar nuevo registro de imagen"""
+    async def insert_image(self, image_record: ImageRecord, embedding: Optional[np.ndarray] = None) -> bool:
+        """Insertar nuevo registro de imagen (con su embedding CLIP, si se proporciona)"""
         try:
             async with self.async_session() as session:
                 db_image = ImageDB(
@@ -85,7 +93,8 @@ class DatabaseService:
                     format=image_record.format,
                     status=image_record.status.value if isinstance(image_record.status, UploadStatus) else image_record.status,
                     similarity_score=image_record.similarity_score,
-                    created_at=image_record.created_at
+                    created_at=image_record.created_at,
+                    embedding=embedding.astype('float32').tobytes() if embedding is not None else None
                 )
                 session.add(db_image)
                 await session.commit()
@@ -93,6 +102,24 @@ class DatabaseService:
         except Exception as e:
             print(f"Error inserting image: {e}")
             return False
+    
+    async def get_all_embeddings(self) -> List[Tuple[str, str, Optional[bytes]]]:
+        """(id, image_path, embedding) de todas las imágenes completadas, en orden de creación"""
+        async with self.async_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(ImageDB.id, ImageDB.image_path, ImageDB.embedding)
+                .where(ImageDB.status == "completed")
+                .order_by(ImageDB.created_at)
+            )
+            return [(row.id, row.image_path, row.embedding) for row in result]
+    
+    async def get_all_filenames(self) -> Set[str]:
+        """Nombres de archivo ya cargados"""
+        async with self.async_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(select(ImageDB.filename))
+            return set(result.scalars().all())
     
     async def get_image(self, image_id: str) -> Optional[ImageRecord]:
         """Obtener registro de imagen por ID"""

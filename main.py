@@ -8,6 +8,8 @@ import math
 import time
 from typing import List, Optional, Tuple
 
+import numpy as np
+
 from app.config import settings
 from app.models import (
     TextSearchRequest, SearchResponse, SearchResult,
@@ -27,6 +29,29 @@ ip_login_limiter = LoginRateLimiter(settings.login_max_attempts_per_ip, settings
 username_login_limiter = LoginRateLimiter(settings.login_max_attempts_per_username, settings.login_window_seconds)
 
 
+async def load_embeddings_from_db(dimension: int) -> List[Tuple[str, np.ndarray]]:
+    """
+    Embeddings de todas las imágenes, para reconstruir FAISS.
+    Usa los guardados en la BD; solo vuelve a procesar con CLIP las imágenes que no
+    tienen uno válido (registros antiguos o embeddings de otro modelo).
+    """
+    embeddings_data = []
+    reencoded = 0
+    for image_id, image_path, blob in await db_service.get_all_embeddings():
+        if blob is not None and len(blob) == dimension * 4:
+            embeddings_data.append((image_id, np.frombuffer(blob, dtype='float32')))
+            continue
+        try:
+            image_bytes = minio_service.get_image(image_path)
+            if image_bytes:
+                embeddings_data.append((image_id, clip_service.encode_image(image_bytes)))
+                reencoded += 1
+        except Exception as e:
+            print(f"Error processing {image_path}: {e}")
+    print(f"Loaded {len(embeddings_data)} embeddings ({reencoded} re-encoded from MinIO)")
+    return embeddings_data
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicializar servicios al inicio de la aplicación"""
@@ -41,32 +66,22 @@ async def lifespan(app: FastAPI):
     # Cargar modelo CLIP
     clip_service.load_model()
 
-    # Inicializar o cargar índice FAISS
-    if not faiss_service.load_index():
-        print("No existing FAISS index found, creating new one...")
+    # Cargar índice FAISS; reconstruirlo si no existe o no coincide con la base de datos
+    # (p. ej. imágenes cargadas con load_dataset_local.py, que escribe directo en la BD)
+    index_loaded = faiss_service.load_index()
+    image_count = await db_service.get_image_count()
+    if not index_loaded or faiss_service.get_count() != image_count:
+        print(
+            f"FAISS index needs rebuild ({faiss_service.get_count()} vectors, "
+            f"{image_count} images in DB)"
+        )
         dimension = clip_service.get_embedding_dimension()
         faiss_service.initialize_index(dimension)
-
-        # Cargar imágenes existentes si las hay
-        images = await db_service.get_all_images()
-        if images:
-            print(f"Rebuilding index with {len(images)} existing images...")
-            embeddings_data = []
-
-            for img in images:
-                try:
-                    # Obtener imagen de MinIO
-                    image_bytes = minio_service.get_image(img.image_path)
-                    if image_bytes:
-                        embedding = clip_service.encode_image(image_bytes)
-                        embeddings_data.append((img.id, embedding))
-                except Exception as e:
-                    print(f"Error processing {img.filename}: {e}")
-
-            if embeddings_data:
-                await faiss_service.rebuild_index(embeddings_data)
-                await faiss_service.save_index()
-
+        embeddings_data = await load_embeddings_from_db(dimension)
+        if embeddings_data:
+            await faiss_service.rebuild_index(embeddings_data)
+        await faiss_service.save_index()
+    
     print("VisionText Backend ready!")
     yield
 
@@ -286,7 +301,7 @@ async def upload_image(
             raise RuntimeError("MinIO upload failed")
 
         # Guardar en base de datos
-        if not await db_service.insert_image(image_record):
+        if not await db_service.insert_image(image_record, embedding):
             raise RuntimeError("Database insert failed")
 
         # Agregar al índice FAISS

@@ -209,6 +209,40 @@ volver a ejecutarlo si se interrumpe.
 
 ---
 
+## Alternativa: MinIO en tu máquina (con ngrok)
+
+Para no pagar el servicio `minio` en Railway, MinIO puede correr en tu máquina y exponerse
+con `ngrok http 9000`. En el servicio `backend`:
+
+```
+MINIO_ENDPOINT=<dominio>.ngrok-free.app
+MINIO_SECURE=true
+MINIO_ACCESS_KEY=<MINIO_ROOT_USER de tu .env local>
+MINIO_SECRET_KEY=<MINIO_ROOT_PASSWORD de tu .env local>
+```
+
+Tu máquina, MinIO y ngrok deben estar encendidos mientras se use el sistema. El plan
+gratuito de ngrok permite 20,000 peticiones y 1 GB de salida al mes.
+
+**Carga del dataset sin gastar el túnel:** `load_dataset_local.py` escribe directo en tu MinIO
+local y en PostgreSQL de Railway, y guarda los embeddings CLIP en la BD. Al reiniciar, el
+backend reconstruye FAISS con esos embeddings sin descargar ninguna imagen.
+
+1. En Railway, servicio `Postgres` → *Settings → Networking → TCP Proxy*. Copia
+   `DATABASE_PUBLIC_URL` (variables de `Postgres`).
+2. En el `.env` de la raíz del proyecto: `CLOUD_POSTGRES_URL=` esa URL, cambiando el inicio
+   `postgresql://` por `postgresql+asyncpg://`.
+3. Desde la raíz del proyecto:
+   ```bash
+   docker compose build visiontext-backend
+   docker compose run --rm visiontext-backend python load_dataset_local.py
+   ```
+4. Reinicia el servicio `backend` en Railway. En los logs:
+   `Loaded 1575 embeddings (0 re-encoded from MinIO)`.
+5. Opcional: elimina el TCP Proxy de `Postgres` para que la BD vuelva a ser solo privada.
+
+---
+
 ## Endpoints (para Postman)
 
 Documentación interactiva: `https://<dominio-backend>/docs`
