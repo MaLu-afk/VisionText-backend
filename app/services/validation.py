@@ -77,23 +77,26 @@ class ContentValidationService:
         
         Args:
             text: Texto a validar
-            is_filename: Si es nombre de archivo, buscar subcadenas
+            is_filename: Si es nombre de archivo, cualquier carácter que no sea letra
+                         (_, -, ., dígitos) separa palabras
         """
         if not text:
             return True, []
-        
+
         text_lower = text.lower()
         found_banned_words = []
-        
+
         for word in self.banned_words:
             if is_filename:
-                # PARA NOMBRES DE ARCHIVO: Buscar subcadenas
-                if word in text_lower:
-                    found_banned_words.append(word)
+                # PARA NOMBRES DE ARCHIVO: palabra completa delimitada por no-letras,
+                # para que "dead_bird.jpg" se detecte pero "badger" o "armadillo" no
+                pattern = r'(?<![a-záéíóúñü])' + re.escape(word) + r'(?![a-záéíóúñü])'
             else:
                 # PARA DESCRIPCIONES: Buscar palabras completas
-                if re.search(r'\b' + re.escape(word) + r'\b', text_lower):
-                    found_banned_words.append(word)
+                pattern = r'\b' + re.escape(word) + r'\b'
+
+            if re.search(pattern, text_lower):
+                found_banned_words.append(word)
         
         is_valid = len(found_banned_words) == 0
         return is_valid, found_banned_words
@@ -102,7 +105,7 @@ class ContentValidationService:
         """Validar nombre de archivo y descripción"""
         violations = []
         
-        # Validar nombre de archivo (BUSCAR SUBCADENAS)
+        # Validar nombre de archivo (PALABRAS SEPARADAS POR NO-LETRAS)
         filename_valid, filename_banned = self.validate_text_content(filename, is_filename=True)
         if not filename_valid:
             violations.extend(filename_banned)

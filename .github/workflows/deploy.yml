@@ -1,0 +1,50 @@
+name: Deploy
+
+# Despliegue a producción SOLO al publicar un tag de versión (p. ej. v1.0.0).
+# Railway observa la rama "production": este workflow la mueve al commit del tag
+# después de que CI pase. Los push normales a main nunca despliegan.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+# Nunca dos despliegues a la vez; el segundo espera al primero
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  promote:
+    name: Promover a producción
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Solo se despliega código que ya está integrado en main
+      - name: Verificar que el tag apunta a un commit de main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::El tag $GITHUB_REF_NAME apunta a un commit que no está en main"
+            exit 1
+          fi
+
+      # production es un puntero que solo maneja este workflow; --force permite
+      # también hacer rollback publicando un tag sobre un commit anterior
+      - name: Mover rama production al tag
+        run: git push --force origin "$GITHUB_SHA:refs/heads/production"
+
+      - name: Resumen
+        run: |
+          echo "### Desplegando $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`$GITHUB_SHA\` publicado en la rama \`production\`. Railway inicia el build automáticamente." >> "$GITHUB_STEP_SUMMARY"

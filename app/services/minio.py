@@ -34,6 +34,17 @@ class MinIOService:
             print(f"Error initializing MinIO buckets: {e}")
             raise
     
+    def ping(self) -> bool:
+        """Verificar que MinIO responde y los buckets existen"""
+        try:
+            return (
+                self.client.bucket_exists(self.bucket_images) and
+                self.client.bucket_exists(self.bucket_thumbnails)
+            )
+        except Exception as e:
+            print(f"MinIO ping failed: {e}")
+            return False
+
     def upload_file(self, bucket: str, object_name: str, data: bytes, 
                    content_type: str = "image/jpeg") -> bool:
         """Subir archivo a MinIO"""

@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     max_upload_size: int = 10485760  # 10MB
     thumbnail_size: int = 256
     default_search_limit: int = 20
-    default_search_limit: int = 20
     text_search_threshold: float = 0.18  # Default para texto
     image_search_threshold: float = 0.65  # Default para imagen
     

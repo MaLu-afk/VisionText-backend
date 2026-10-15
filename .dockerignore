@@ -1,0 +1,19 @@
+# Control de versiones y CI
+.git
+.github
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secretos: las variables se inyectan en tiempo de ejecución
+.env
+.env.*
+
+# Datos pesados o generados en tiempo de ejecución (van en volúmenes)
+model_cache/
+faiss_indices/
+
+# El dataset se carga vía API con load_dataset.py, no forma parte de la imagen
+dataset_final/

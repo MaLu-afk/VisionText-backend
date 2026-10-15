@@ -1,14 +1,14 @@
+import secrets
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from app.config import settings
 
 
 def verify_admin_credentials(username: str, password: str) -> bool:
-    """Verificar credenciales del administrador"""
-    return (
-        username == settings.admin_username and 
-        password == settings.admin_password
-    )
+    """Verificar credenciales del administrador (comparación en tiempo constante)"""
+    username_ok = secrets.compare_digest(username.encode(), settings.admin_username.encode())
+    password_ok = secrets.compare_digest(password.encode(), settings.admin_password.encode())
+    return username_ok and password_ok
 
 
 def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=24)):

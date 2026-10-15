@@ -30,6 +30,7 @@ pydantic-settings==2.6.1
 python-multipart==0.0.17
 python-dotenv==1.0.1
 numpy==1.26.4
+tqdm==4.67.1
 
 # CORS
 python-jose[cryptography]==3.3.0

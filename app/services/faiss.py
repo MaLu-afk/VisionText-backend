@@ -105,7 +105,19 @@ class FAISSService:
                 metadata = pickle.load(f)
                 self.image_ids = metadata['image_ids']
                 self.dimension = metadata['dimension']
-            
+
+            # Un índice desalineado (p. ej. guardado tras borrados con la versión anterior)
+            # devolvería imágenes equivocadas: se descarta para reconstruirlo desde la BD
+            if self.index.ntotal != len(self.image_ids):
+                print(
+                    f"FAISS index out of sync ({self.index.ntotal} vectors, "
+                    f"{len(self.image_ids)} IDs), it will be rebuilt"
+                )
+                self.index = None
+                self.image_ids = []
+                self.dimension = None
+                return False
+
             print(f"FAISS index loaded with {self.index.ntotal} vectors")
             return True
         except Exception as e:
@@ -146,21 +158,29 @@ class FAISSService:
     async def remove_embedding(self, image_id: str) -> bool:
         """
         Eliminar un embedding del índice
-        Solo remueve el ID de la lista, el vector físico se eliminará al reiniciar el servidor
-        Esto permite eliminación instantánea sin reconstruir todo el índice
+        Remueve el vector físico y su ID en la misma posición, para que el índice
+        FAISS y la lista image_ids sigan alineados
         """
         async with self.lock:
-            if image_id not in self.image_ids:
+            if self.index is None or image_id not in self.image_ids:
                 return False
-            
+
             try:
-                # Remover de lista de IDs
-                self.image_ids.remove(image_id)
-                print(f"Removed image ID from FAISS (remaining: {len(self.image_ids)} images)")
+                position = self.image_ids.index(image_id)
+
+                # IndexFlat compacta los vectores restantes conservando el orden,
+                # igual que al borrar el elemento de la lista
+                removed = self.index.remove_ids(np.array([position], dtype='int64'))
+                if removed != 1:
+                    print(f"Error removing vector for {image_id}: FAISS removed {removed} vectors")
+                    return False
+
+                del self.image_ids[position]
+                print(f"Removed image from FAISS (remaining: {self.index.ntotal} vectors)")
                 return True
-                
+
             except Exception as e:
-                print(f"Error removing image ID: {e}")
+                print(f"Error removing embedding: {e}")
                 return False
 
 

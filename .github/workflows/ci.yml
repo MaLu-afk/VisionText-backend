@@ -1,0 +1,28 @@
+name: CI
+
+# Corre en cada push a main y en cada PR. También lo reutiliza deploy.yml
+# para que nunca se despliegue un commit que no pase estas verificaciones.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Se construye la misma imagen que construirá Railway: si falla aquí, fallaría allí
+      - name: Construir imagen Docker
+        run: docker build -t visiontext-backend:ci .
+
+      - name: Ejecutar tests dentro de la imagen
+        run: |
+          docker run --rm -v "$PWD:/app" -w /app visiontext-backend:ci \
+            sh -c "pip install -q -r requirements-dev.txt && python -m pytest -q"

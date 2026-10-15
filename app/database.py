@@ -53,6 +53,17 @@ class DatabaseService:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     
+    async def ping(self) -> bool:
+        """Verificar que la base de datos responde"""
+        try:
+            async with self.engine.connect() as conn:
+                from sqlalchemy import text
+                await conn.execute(text("SELECT 1"))
+            return True
+        except Exception as e:
+            print(f"Database ping failed: {e}")
+            return False
+
     async def get_session(self) -> AsyncSession:
         """Obtener sesión de base de datos"""
         async with self.async_session() as session:
